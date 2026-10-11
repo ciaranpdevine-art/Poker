@@ -1,3 +1,11 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>body{margin:0}[hidden]{display:none!important}</style>
+</head>
+<body>
 <title>GTO Hand Review</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
@@ -177,7 +185,7 @@ const rangeCombos=r=>{let n=0;for(let k=0;k<169;k++)if(r[k]==='1')n+=CELLS[k].co
 
 /* ---------- 7-card evaluator ---------- */
 function straightHi(m){for(let h=12;h>=4;h--)if(((m>>(h-4))&31)===31)return h;return (m&0x100F)===0x100F?3:-1;}
-function top(m,n,sh){let v=0;for(let r=12;r>=0&&n>0;r--)if(m&(1<<r)){v|=r<<sh;sh-=4;n--;}return v;}
+function topBits(m,n,sh){let v=0;for(let r=12;r>=0&&n>0;r--)if(m&(1<<r)){v|=r<<sh;sh-=4;n--;}return v;}
 const RC=new Int8Array(13);
 function eval7(c){
   RC.fill(0);const sc=[0,0,0,0],sm=[0,0,0,0];let mask=0;
@@ -188,12 +196,12 @@ function eval7(c){
   for(let r=12;r>=0;r--){if(RC[r]===4)quad=r;else if(RC[r]===3)trips.push(r);else if(RC[r]===2)pairs.push(r);}
   if(quad>=0){let k=0;for(let r=12;r>=0;r--)if(r!==quad&&RC[r]){k=r;break;}return (7<<20)|(quad<<16)|(k<<12);}
   if(trips.length&&(trips.length>1||pairs.length)){const p=Math.max(trips.length>1?trips[1]:-1,pairs.length?pairs[0]:-1);return (6<<20)|(trips[0]<<16)|(p<<12);}
-  if(f>=0)return (5<<20)|top(sm[f],5,16);
+  if(f>=0)return (5<<20)|topBits(sm[f],5,16);
   const st=straightHi(mask);if(st>=0)return (4<<20)|(st<<16);
-  if(trips.length){const t=trips[0];return (3<<20)|(t<<16)|top(mask&~(1<<t),2,12);}
-  if(pairs.length>=2){const a=pairs[0],b=pairs[1];return (2<<20)|(a<<16)|(b<<12)|top(mask&~(1<<a)&~(1<<b),1,8);}
-  if(pairs.length){const p=pairs[0];return (1<<20)|(p<<16)|top(mask&~(1<<p),3,12);}
-  return top(mask,5,16);
+  if(trips.length){const t=trips[0];return (3<<20)|(t<<16)|topBits(mask&~(1<<t),2,12);}
+  if(pairs.length>=2){const a=pairs[0],b=pairs[1];return (2<<20)|(a<<16)|(b<<12)|topBits(mask&~(1<<a)&~(1<<b),1,8);}
+  if(pairs.length){const p=pairs[0];return (1<<20)|(p<<16)|topBits(mask&~(1<<p),3,12);}
+  return topBits(mask,5,16);
 }
 
 /* hero vs range equity: exact on turn/river, Monte Carlo before */
@@ -603,3 +611,6 @@ function start(){
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);else start();
 </script>
+
+</body>
+</html>
