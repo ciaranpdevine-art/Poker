@@ -16,7 +16,7 @@
   --accent:#0e7356; --accent-ink:#ffffff; --accent-soft:#d8eee6;
   --good:#1b7a3e; --good-soft:#e1f2e6; --warn:#a15c00; --warn-soft:#fbeedb; --bad:#b0281f; --bad-soft:#f8e1df;
   --spade:#13201c; --heart:#c62828; --diamond:#1a5fb4; --club:#2b7a33; --face:#ffffff;
-  --r-pair:#c9dcd5; --r-suit:#dfe8e4; --r-off:#eef3f1;
+  --r-pair:#c9dcd5; --r-suit:#dfe8e4; --r-off:#eef3f1; --call:#2d68b0; --call-ink:#ffffff;
   --display:"Bricolage Grotesque", "Avenir Next", "Segoe UI", sans-serif;
   --body:"IBM Plex Sans", "Segoe UI", Roboto, sans-serif;
   --mono:"IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
@@ -26,13 +26,13 @@
   --accent:#3dbb90; --accent-ink:#06130e; --accent-soft:#183a2e;
   --good:#5cc97f; --good-soft:#163222; --warn:#e9a84a; --warn-soft:#352612; --bad:#f07a70; --bad-soft:#3a1b18;
   --spade:#e4ebe8; --heart:#f2605a; --diamond:#6aaaf2; --club:#62c56f; --face:#1d2723;
-  --r-pair:#24332e; --r-suit:#1d2925; --r-off:#18211e; color-scheme:dark}}
+  --r-pair:#24332e; --r-suit:#1d2925; --r-off:#18211e; --call:#5f9ee6; --call-ink:#07121f; color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#0e1412; --surface:#161e1b; --sunk:#111816; --ink:#e4ebe8; --muted:#93a39d; --line:#2a3632;
   --accent:#3dbb90; --accent-ink:#06130e; --accent-soft:#183a2e;
   --good:#5cc97f; --good-soft:#163222; --warn:#e9a84a; --warn-soft:#352612; --bad:#f07a70; --bad-soft:#3a1b18;
   --spade:#e4ebe8; --heart:#f2605a; --diamond:#6aaaf2; --club:#62c56f; --face:#1d2723;
-  --r-pair:#24332e; --r-suit:#1d2925; --r-off:#18211e; color-scheme:dark}
+  --r-pair:#24332e; --r-suit:#1d2925; --r-off:#18211e; --call:#5f9ee6; --call-ink:#07121f; color-scheme:dark}
 *{box-sizing:border-box}
 body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.5}
 button,input,select,textarea{font:inherit;color:inherit}
@@ -83,6 +83,14 @@ input[type=number]{font-family:var(--mono);font-variant-numeric:tabular-nums}
 .cell{aspect-ratio:1;border:0;border-radius:3px;font-family:var(--mono);font-size:.62rem;padding:0;cursor:pointer;color:var(--muted)}
 .cell.p{background:var(--r-pair)}.cell.s{background:var(--r-suit)}.cell.o{background:var(--r-off)}
 .cell.on{background:var(--accent);color:var(--accent-ink);font-weight:600}
+.cell.raise{background:var(--accent);color:var(--accent-ink);font-weight:600}
+.cell.call{background:var(--call);color:var(--call-ink);font-weight:600}
+.cell.sel{outline:2px solid var(--ink);outline-offset:1px}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:.85rem;font-variant-numeric:tabular-nums}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{width:12px;height:12px;border-radius:3px;display:inline-block}
+.seg{display:flex;flex-wrap:wrap;gap:6px}
+.lookup{font-size:.95rem;min-height:1.5em}
 .meta{font-size:.82rem;color:var(--muted);font-variant-numeric:tabular-nums}
 input[type=range]{width:100%;accent-color:var(--accent)}
 /* decisions */
@@ -134,6 +142,7 @@ td{font-family:var(--mono)}
     <div class="brand">GTO Hand Review<small>Log a hand, check every decision against the maths</small></div>
     <nav class="tabs" role="tablist">
       <button class="tab" role="tab" id="tab-review" data-tab="review">Review</button>
+      <button class="tab" role="tab" id="tab-preflop" data-tab="preflop">Preflop</button>
       <button class="tab" role="tab" id="tab-saved" data-tab="saved">Saved</button>
       <button class="tab" role="tab" id="tab-formulas" data-tab="formulas">Formulas</button>
     </nav>
@@ -142,6 +151,7 @@ td{font-family:var(--mono)}
 
 <main class="wrap">
   <section id="view-review"></section>
+  <section id="view-preflop" hidden></section>
   <section id="view-saved" hidden></section>
   <section id="view-formulas" hidden></section>
 </main>
@@ -434,6 +444,106 @@ function verdict(d,eq,need,P,B){
   return ['info',`Checking with ${E} equity. Checking is strongest with medium hands that want showdown, and with traps that protect your checking range.`];
 }
 
+/* ---------- preflop charts (6-max cash, 100bb, approximate) ---------- */
+const LABEL_K={};CELLS.forEach((c,k)=>LABEL_K[c.label]=k);
+function expandToken(tok){
+  const out=[];const t=tok.trim();if(!t)return out;
+  const pairRange=(a,b)=>{const lo=Math.min(rIdx(a),rIdx(b)),hi=Math.max(rIdx(a),rIdx(b));for(let r=lo;r<=hi;r++)out.push(RANKS[r]+RANKS[r]);};
+  if(t.includes('-')){
+    const [a,b]=t.split('-');
+    if(a[0]===a[1])pairRange(a[0],b[0]);
+    else{const lo=Math.min(rIdx(a[1]),rIdx(b[1])),hi=Math.max(rIdx(a[1]),rIdx(b[1]));for(let r=lo;r<=hi;r++)out.push(a[0]+RANKS[r]+a[2]);}
+    return out;
+  }
+  if(t.endsWith('+')){
+    const h=t.slice(0,-1);
+    if(h[0]===h[1])pairRange(h[0],'A');
+    else for(let r=rIdx(h[1]);r<rIdx(h[0]);r++)out.push(h[0]+RANKS[r]+h[2]);
+    return out;
+  }
+  return [t];
+}
+function parseRange(str){const set=new Set();for(const tok of str.split(','))for(const l of expandToken(tok))if(LABEL_K[l]!=null)set.add(LABEL_K[l]);return set;}
+
+const RFI={
+  UTG:'55+,A2s+,K9s+,QTs+,JTs,T9s,98s,AJo+,KQo',
+  HJ:'44+,A2s+,K8s+,Q9s+,J9s+,T9s,98s,87s,ATo+,KJo+,QJo',
+  CO:'22+,A2s+,K5s+,Q8s+,J8s+,T8s+,97s+,86s+,76s,65s,A8o+,KTo+,QTo+,JTo',
+  BTN:'22+,A2s+,K2s+,Q4s+,J6s+,T6s+,96s+,85s+,75s+,64s+,54s,A2o+,K8o+,Q9o+,J9o+,T9o,98o',
+  SB:'22+,A2s+,K3s+,Q5s+,J7s+,T7s+,97s+,86s+,75s+,65s,54s,A4o+,K9o+,Q9o+,J9o+,T9o'
+};
+// facing an open: [3-bet, call] by opener, for in-position callers (HJ/CO/BTN), SB and BB
+const VS={
+  UTG:{IP:['QQ+,AKs,AKo,A5s,A4s','JJ-77,AQs-ATs,KQs,KJs,QJs,JTs,T9s,AQo'],
+       SB:['TT+,AQs+,AKo,KQs,A5s,A4s',''],
+       BB:['QQ+,AKs,AKo,A5s,A4s','JJ-22,AQs-A6s,A3s-A2s,K9s+,Q9s+,J9s+,T8s+,97s+,86s+,76s,65s,54s,AJo,AQo,KQo']},
+  HJ:{IP:['JJ+,AQs+,AKo,KQs,A5s,A4s','TT-66,AJs-ATs,KJs,KTs,QJs,JTs,T9s,98s,AQo'],
+      SB:['TT+,AJs+,KJs+,AQo+,A5s,A4s',''],
+      BB:['JJ+,AQs+,AKo,KQs,A5s-A3s','TT-22,AJs-A6s,A2s,K8s+,Q9s+,J8s+,T8s+,97s+,86s+,75s+,65s,54s,ATo-AQo,KJo+,QJo']},
+  CO:{IP:['TT+,AJs+,KQs,AQo+,A5s-A3s,76s,65s','99-55,ATs-A9s,KTs-KJs,QTs+,JTs,T9s,98s,87s,AJo,KQo'],
+      SB:['99+,ATs+,KJs+,QJs,AJo+,KQo,A5s-A2s',''],
+      BB:['TT+,AJs+,KQs,AQo+,A5s-A2s','99-22,ATs-A6s,K6s+,Q8s+,J8s+,T7s+,96s+,86s+,75s+,64s+,54s,A8o-AJo,KTo+,QTo+,JTo']},
+  BTN:{SB:['88+,A8s+,A5s-A2s,KTs+,QTs+,JTs,T9s,ATo+,KJo+',''],
+       BB:['TT+,ATs+,KJs+,AJo+,A5s-A2s,87s,76s,65s','99-22,A9s-A6s,KTs-K2s,QJs-Q5s,JTs-J7s,T9s-T7s,96s+,85s+,74s+,64s+,53s+,43s,ATo-A2o,KQo-K8o,Q9o+,J9o+,T9o,98o']},
+  SB:{BB:['99+,A9s+,A5s-A2s,KTs+,QJs,AJo+,KQo','88-22,A8s-A6s,K9s-K2s,QTs-Q2s,J5s+,T6s+,96s+,85s+,74s+,63s+,53s+,43s,ATo-A2o,KJo-K5o,Q8o+,J8o+,T8o+,98o,87o']}
+};
+const PF={mode:'open',hero:'BTN',opener:'CO',sel:null};
+function pfChart(){
+  if(PF.mode==='open'){const r=parseRange(RFI[PF.hero]);return{raise:r,call:new Set(),raiseName:'Open raise',title:`${PF.hero} opening range`};}
+  const grp=PF.hero==='SB'?'SB':PF.hero==='BB'?'BB':'IP';
+  const [r3,c]=VS[PF.opener][grp];const raise=parseRange(r3),call=parseRange(c);for(const k of raise)call.delete(k);
+  return{raise,call,raiseName:'3-bet',title:`${PF.hero} vs ${PF.opener} open`};
+}
+const openersFor=h=>POS.slice(0,POS.indexOf(h)).filter(p=>p!=='BB');
+const combosIn=set=>{let n=0;for(const k of set)n+=CELLS[k].combos.length;return n;};
+function pfAction(ch,k){return ch.raise.has(k)?ch.raiseName:ch.call.has(k)?'Call':'Fold';}
+function renderPreflop(){
+  if(PF.mode==='vs'){if(PF.hero==='UTG')PF.hero='BTN';const ops=openersFor(PF.hero);if(!ops.includes(PF.opener))PF.opener=ops[ops.length-1];}
+  if(PF.mode==='open'&&PF.hero==='BB')PF.hero='BTN';
+  const ch=pfChart(),nr=combosIn(ch.raise),nc=combosIn(ch.call),nf=1326-nr-nc;
+  const heroOpts=PF.mode==='open'?POS.filter(p=>p!=='BB'):POS.filter(p=>p!=='UTG');
+  const seg=(name,vals,cur)=>`<div class="seg">${vals.map(v=>`<button type="button" class="chip" data-pf="${name}" data-v="${v}" aria-pressed="${v===cur}">${v}</button>`).join('')}</div>`;
+  const selTxt=PF.sel!=null?(()=>{const a=pfAction(ch,PF.sel);return `<b>${CELLS[PF.sel].label}</b>: ${a}`})():'Tap a hand to see the play.';
+  const sizing=PF.mode==='open'?(PF.hero==='SB'?'Open to 3bb from the small blind.':'Open to 2.5bb.')
+    :(PF.hero==='SB'||PF.hero==='BB'?'3-bet to about 4x the open out of position.':'3-bet to about 3x the open in position.');
+  document.getElementById('view-preflop').innerHTML=`<div class="cols">
+  <div class="stack">
+    <div class="panel">
+      <h2>Situation</h2>
+      ${seg('mode',['Open','Facing a raise'],PF.mode==='open'?'Open':'Facing a raise')}
+      <div style="margin-top:12px"><span class="lbl">Your position</span>${seg('hero',heroOpts,PF.hero)}</div>
+      ${PF.mode==='vs'?`<div style="margin-top:12px"><span class="lbl">Who opened</span>${seg('opener',openersFor(PF.hero),PF.opener)}</div>`:''}
+      <p class="meta" style="margin:12px 0 0">${PF.mode==='open'?'Everyone has folded to you.':'One player has opened and everyone else folded.'} ${sizing}</p>
+    </div>
+    <div class="panel prose">
+      <h2>How to read it</h2>
+      <p>6-max cash, 100bb deep, standard open sizes. These are simplified charts based on common solver outputs. Solvers mix many hands between actions; here each hand gets its most frequent play.</p>
+      <p>Small blind strategies are raise-or-fold. The 3-bet bluffs (A5s–A2s, suited connectors) are chosen for blockers and playability, not raw strength.</p>
+      <p>At live or very passive tables, tighten the 3-bet bluffs and widen calls with pairs and suited hands.</p>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="row spread"><h2 style="margin:0">${ch.title}</h2><button type="button" class="btn small" id="pf-use">Use as villain range</button></div>
+    <div class="legend" style="margin:10px 0">
+      <span><i style="background:var(--accent)"></i>${ch.raiseName} ${pct(nr/1326)}</span>
+      ${PF.mode==='vs'?`<span><i style="background:var(--call)"></i>Call ${pct(nc/1326)}</span>`:''}
+      <span><i style="background:var(--r-off);border:1px solid var(--line)"></i>Fold ${pct(nf/1326)}</span>
+    </div>
+    <div class="gridwrap"><div class="rgrid" id="pfgrid">${CELLS.map((c,k)=>`<button type="button" class="cell ${c.type} ${ch.raise.has(k)?'raise':ch.call.has(k)?'call':''} ${PF.sel===k?'sel':''}" data-pk="${k}" aria-label="${c.label} ${pfAction(ch,k)}">${c.label}</button>`).join('')}</div></div>
+    <p class="lookup" style="margin:12px 0 0">${selTxt}</p>
+  </div></div>`;
+}
+document.getElementById('view-preflop').addEventListener('click',e=>{
+  const b=e.target.closest('button');if(!b)return;
+  if(b.dataset.pf){const v=b.dataset.v;
+    if(b.dataset.pf==='mode')PF.mode=v==='Open'?'open':'vs';else PF[b.dataset.pf]=v;renderPreflop();return;}
+  if(b.dataset.pk!=null){PF.sel=+b.dataset.pk;renderPreflop();return;}
+  if(b.id==='pf-use'){const ch=pfChart();const arr=Array(169).fill('0');
+    for(const k of ch.raise)arr[k]='1';for(const k of ch.call)arr[k]='1';
+    S.hand.range=arr.join('');S.hand.rangeName='Custom';saveDraft();renderReview();setTab('review');
+    toast(`Villain range set to ${ch.title}`);}
+});
+
 /* ---------- saved view ---------- */
 function renderSaved(){
   const el=document.getElementById('view-saved');
@@ -539,7 +649,7 @@ async function initDb(){
 
 /* ---------- events ---------- */
 function setTab(t){S.tab=t;
-  for(const v of ['review','saved','formulas']){document.getElementById('view-'+v).hidden=v!==t;document.getElementById('tab-'+v).setAttribute('aria-selected',v===t);}
+  for(const v of ['review','preflop','saved','formulas']){document.getElementById('view-'+v).hidden=v!==t;document.getElementById('tab-'+v).setAttribute('aria-selected',v===t);}
   try{localStorage.setItem('gto-review-tab',t)}catch{}
 }
 document.querySelector('.tabs').addEventListener('click',e=>{const b=e.target.closest('[data-tab]');if(b)setTab(b.dataset.tab);});
@@ -602,11 +712,12 @@ function showError(err){
 }
 function start(){
   let tab='review';try{tab=localStorage.getItem('gto-review-tab')||'review'}catch{}
-  if(!['review','saved','formulas'].includes(tab))tab='review';
+  if(!['review','preflop','saved','formulas'].includes(tab))tab='review';
   setTab(tab);
   try{renderReview();}catch(err){S.hand=exampleHand();try{localStorage.removeItem(DRAFT)}catch{};try{renderReview();}catch{};showError(err);}
   try{renderSaved();}catch(err){console.error(err);}
   try{renderFormulas();}catch(err){console.error(err);}
+  try{renderPreflop();}catch(err){console.error(err);}
   setTimeout(initDb,0);
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);else start();
