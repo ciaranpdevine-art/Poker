@@ -44,7 +44,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 .tabs{display:flex;gap:2px;max-width:100%;overflow-x:auto;scrollbar-width:none}
 .tabs::-webkit-scrollbar{display:none}
 .tab{background:none;border:0;border-bottom:2px solid transparent;padding:8px 10px 10px;color:var(--muted);font-weight:600;cursor:pointer;white-space:nowrap;flex:none}
-@media (max-width:520px){.top-in{flex-direction:column;align-items:stretch}.tabs{justify-content:space-between}.tab{padding-inline:6px}}
+@media (max-width:520px){.top-in{flex-direction:column;align-items:stretch}.tabs{justify-content:space-between}.tab{padding-inline:5px;font-size:.88rem}}
 .tab[aria-selected="true"]{color:var(--ink);border-color:var(--accent)}
 .wrap{max-width:1180px;margin:0 auto;padding-inline:16px;padding-block:16px 80px}
 .cols{display:grid;gap:16px}
@@ -93,6 +93,7 @@ input[type=number]{font-family:var(--mono);font-variant-numeric:tabular-nums}
 .legend i{width:12px;height:12px;border-radius:3px;display:inline-block}
 .seg{display:flex;flex-wrap:wrap;gap:6px}
 .lookup{font-size:.95rem;min-height:1.5em}
+.tips{margin:0;padding-left:18px;display:grid;gap:4px;font-size:.9rem}
 .meta{font-size:.82rem;color:var(--muted);font-variant-numeric:tabular-nums}
 input[type=range]{width:100%;accent-color:var(--accent)}
 /* decisions */
@@ -145,6 +146,7 @@ td{font-family:var(--mono)}
     <nav class="tabs" role="tablist">
       <button class="tab" role="tab" id="tab-review" data-tab="review">Review</button>
       <button class="tab" role="tab" id="tab-preflop" data-tab="preflop">Preflop</button>
+      <button class="tab" role="tab" id="tab-players" data-tab="players">Players</button>
       <button class="tab" role="tab" id="tab-saved" data-tab="saved">Saved</button>
       <button class="tab" role="tab" id="tab-formulas" data-tab="formulas">Formulas</button>
     </nav>
@@ -154,6 +156,7 @@ td{font-family:var(--mono)}
 <main class="wrap">
   <section id="view-review"></section>
   <section id="view-preflop" hidden></section>
+  <section id="view-players" hidden></section>
   <section id="view-saved" hidden></section>
   <section id="view-formulas" hidden></section>
 </main>
@@ -267,7 +270,8 @@ function blankHand(){return{
 const DRAFT='gto-review-draft-v1', LOCAL='gto-review-hands-v1';
 const ls={get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch{return d}},
   set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch{}}};
-const S={tab:'review',hand:ls.get(DRAFT,null)||exampleHand(),hands:ls.get(LOCAL,[]),db:null,pick:null,confirmDel:null,running:{}};
+const LOCALP='gto-review-players-v1';
+const S={tab:'review',hand:ls.get(DRAFT,null)||exampleHand(),hands:ls.get(LOCAL,[]),players:ls.get(LOCALP,[]),player:null,confirmDelP:false,db:null,pick:null,confirmDel:null,running:{}};
 
 /* ---------- helpers ---------- */
 const pct=(x,d=1)=>(x*100).toFixed(d)+'%';
@@ -300,6 +304,7 @@ function renderReview(){
           <div><label class="lbl" for="f-format">Format</label><select id="f-format" data-f="format">${['Cash 6-max','Cash full ring','MTT','Sit & Go','Live cash'].map(o=>`<option ${o===h.format?'selected':''}>${o}</option>`).join('')}</select></div>
           <div><label class="lbl" for="f-stack">Effective stack (bb)</label><input id="f-stack" type="number" step="any" data-f="stack" value="${esc(h.stack)}"></div>
           <div><label class="lbl" for="f-hpos">Your position</label><select id="f-hpos" data-f="heroPos">${POS.map(p=>`<option ${p===h.heroPos?'selected':''}>${p}</option>`).join('')}</select></div>
+          <div><label class="lbl" for="f-villain">Villain player</label><select id="f-villain"><option value="">Unknown player</option>${[...S.players].sort((a,b)=>a.name.localeCompare(b.name)).map(p=>`<option value="${esc(p.id)}" ${p.id===h.villainId?'selected':''}>${esc(p.name)}</option>`).join('')}</select></div>
           <div><label class="lbl" for="f-vpos">Villain position</label><select id="f-vpos" data-f="villainPos">${POS.map(p=>`<option ${p===h.villainPos?'selected':''}>${p}</option>`).join('')}</select></div>
           <div><label class="lbl" for="f-result">Result (bb)</label><input id="f-result" type="number" step="any" data-f="result" value="${esc(h.result)}" placeholder="-8.5"></div>
           <div><label class="lbl" for="f-tags">Tags</label><input id="f-tags" type="text" data-f="tags" value="${esc(h.tags)}" placeholder="3-bet pot, bluff catch"></div>
@@ -354,7 +359,9 @@ function renderSummary(){
     <div class="stat"><span class="lbl">Flop SPR</span><span class="v">≈${spr}</span></div>
     ${res!==null?`<div class="stat"><span class="lbl">Result</span><span class="v res ${res>0?'pos':res<0?'neg':''}">${res>0?'+':''}${res}bb</span></div>`:''}
   </div>
-  ${spr!=='—'?`<p class="meta" style="margin:10px 0 0">${sprNote(num(spr))}</p>`:''}`;
+  ${spr!=='—'?`<p class="meta" style="margin:10px 0 0">${sprNote(num(spr))}</p>`:''}
+  ${(()=>{const p=S.players.find(x=>x.id===h.villainId);if(!p)return '';
+    return `<div style="margin-top:12px"><span class="lbl">How to beat ${esc(p.name)}</span><ul class="tips">${playerTips(p).slice(0,4).map(t=>`<li>${esc(t)}</li>`).join('')}</ul></div>`;})()}`;
 }
 function sprNote(s){
   if(s<3)return 'Low SPR: top pair and overpairs are usually happy to get all in. Commit early or fold early.';
@@ -561,7 +568,7 @@ function renderSaved(){
         <span class="hand-title">${esc(h.title||'Untitled hand')}</span>
         <span class="row" style="gap:10px"><span class="cards">${(h.hero||[]).filter(Boolean).map(c=>cardHTML(c,{mini:true})).join('')}</span>
         <span class="cards">${(h.board||[]).filter(Boolean).map(c=>cardHTML(c,{mini:true})).join('')}</span></span>
-        <span class="meta">${esc(h.date)} · ${esc(h.stakes)} · ${esc(h.heroPos)} vs ${esc(h.villainPos)}${h.tags?' · '+esc(h.tags):''}</span>
+        <span class="meta">${esc(h.date)} · ${esc(h.stakes)} · ${esc(h.heroPos)} vs ${esc(h.villainName||h.villainPos)}${h.tags?' · '+esc(h.tags):''}</span>
       </button>
       <div style="display:grid;gap:6px;justify-items:end">
         ${r!==null?`<span class="res ${r>0?'pos':r<0?'neg':''}">${r>0?'+':''}${r}bb</span>`:''}
@@ -646,12 +653,140 @@ async function initDb(){
       S.hands=[...remote,...ls.get(LOCAL,[]).filter(h=>!ids.has(h.id))];
       renderSaved();
     },()=>{S.db=null;renderSaved();});
+    db.collection('players').onSnapshot(snap=>{
+      const remote=snap.docs.map(d=>d.data());
+      const ids=new Set(remote.map(p=>p.id));
+      S.players=[...remote,...ls.get(LOCALP,[]).filter(p=>!ids.has(p.id))];
+      renderPlayers();refreshVillainSelect();
+    },()=>{});
   }catch{}
 }
 
+/* ---------- players ---------- */
+const STYLES={
+  station:{name:'Calling station',vpip:45,desc:'Plays lots of hands and calls down with any pair or draw. Rarely raises.',
+    tips:['Stop bluffing them. Almost all your profit comes from value bets.','Value bet thinner: top pair, and sometimes second pair, can bet two or three streets.','Size up with strong hands. They call big bets almost as often as small ones.']},
+  maniac:{name:'Maniac',vpip:55,desc:'Raises and bets constantly, with or without a hand.',
+    tips:['Call down lighter. Their big bets are often bluffs.','Check strong hands and let them bet for you.','Tighten your preflop calls and 3-bet good hands for value.']},
+  rock:{name:'Rock',vpip:14,desc:'Plays very few hands and only bets when strong.',
+    tips:['Steal their blinds relentlessly.','Fold one-pair hands when they raise or bet big.','Bluff when they check twice. They give up without a strong hand.']},
+  fitfold:{name:'Fit or fold',vpip:32,desc:'Plays plenty preflop but gives up when they miss the flop.',
+    tips:['C-bet small and often, especially on dry boards.','Float their weak bets in position and take the pot on the turn.']},
+  newbie:{name:'Beginner',vpip:40,desc:'Still learning. Plays hands at face value.',
+    tips:['Keep it simple: value bet often and rarely bluff.','Big bets usually mean a big hand. Believe them.']},
+  solid:{name:'Solid player',vpip:22,desc:'Tight and aggressive. The closest to GTO at the table.',
+    tips:['Stay close to the GTO charts against them.','Avoid big pots without a strong hand. Spend your energy on the weaker players.']}
+};
+const TEND=[
+  ['calls','Calls too much','Cut bluffs, and value bet thinner and bigger.'],
+  ['nobluff','Rarely bluffs big','Fold one pair to big turn and river bets.'],
+  ['bluffs','Bluffs too much','Call down lighter, and check strong hands to let them bluff.'],
+  ['folds','Folds to c-bets','C-bet small and often, and bluff more on dry boards.'],
+  ['limps','Limps a lot','Raise their limps to 4–5bb plus 1bb per limper with a wide value range.'],
+  ['toppair','Overvalues top pair','Bet two pair or better big on all three streets.'],
+  ['draws','Chases draws','Bet big on wet boards. Don\'t give free cards.'],
+  ['slowplays','Slowplays big hands','Respect check-raises and sudden aggression after passive play.'],
+  ['tilts','Tilts after losing','After they lose a big pot, widen your value bets and cut bluffs.'],
+  ['bigfold','Folds to big bets','Overbet as a bluff on scary turns and rivers.']];
+function playerTips(p){
+  const out=[...(STYLES[p.style]?.tips||[])];
+  for(const [k,,tip] of TEND)if((p.tend||[]).includes(k))out.push(tip);
+  return out;
+}
+function newPlayer(){return{id:null,name:'',style:'station',vpip:45,range:topRange(45),tend:[],notes:''};}
+function persistPlayersLocal(){ls.set(LOCALP,S.players);}
+function refreshVillainSelect(){const el=document.getElementById('f-villain');if(!el)return;
+  el.innerHTML=`<option value="">Unknown player</option>${[...S.players].sort((a,b)=>a.name.localeCompare(b.name)).map(p=>`<option value="${esc(p.id)}" ${p.id===S.hand.villainId?'selected':''}>${esc(p.name)}</option>`).join('')}`;}
+function useInReview(p){
+  S.hand.villainId=p.id;S.hand.villainName=p.name;S.hand.range=p.range;S.hand.rangeName='Custom';
+  saveDraft();renderReview();setTab('review');window.scrollTo(0,0);toast(`Villain set to ${p.name}`);
+}
+function renderPlayers(){
+  const el=document.getElementById('view-players');if(!el)return;
+  const P=S.player;
+  const list=[...S.players].sort((a,b)=>a.name.localeCompare(b.name));
+  const editor=P?`
+    <div class="panel">
+      <div class="row spread" style="margin-bottom:12px"><h2 style="margin:0">${P.id?'Edit player':'New player'}</h2><button type="button" class="btn small ghost" id="p-cancel">Close</button></div>
+      <div class="stack" style="gap:14px">
+        <div><label class="lbl" for="p-name">Name</label><input id="p-name" type="text" value="${esc(P.name)}" placeholder="e.g. Dave"></div>
+        <div><span class="lbl">Playing style</span><div class="chips">${Object.entries(STYLES).map(([k,s])=>`<button type="button" class="chip" data-style="${k}" aria-pressed="${P.style===k}">${s.name}</button>`).join('')}</div>
+          <p class="meta" style="margin:6px 0 0">${esc(STYLES[P.style]?.desc||'')}</p></div>
+        <div><label class="lbl" for="p-vpip">Plays about <span id="p-vpip-val">${P.vpip}</span>% of hands preflop</label>
+          <input id="p-vpip" type="range" min="5" max="100" step="1" value="${P.vpip}">
+          <p class="meta" style="margin:4px 0 0">Count how often they put money in voluntarily. This sets their default range; tap the grid to fine-tune.</p>
+          <div class="gridwrap"><div class="rgrid" id="p-grid">${CELLS.map((c,k)=>`<button type="button" class="cell ${c.type} ${P.range[k]==='1'?'on':''}" data-pcell="${k}">${c.label}</button>`).join('')}</div></div></div>
+        <div><span class="lbl">Tendencies</span><div class="chips">${TEND.map(([k,l])=>`<button type="button" class="chip" data-tend="${k}" aria-pressed="${P.tend.includes(k)}">${l}</button>`).join('')}</div></div>
+        <div><label class="lbl" for="p-notes">Notes</label><textarea id="p-notes" rows="3" placeholder="e.g. Shoves any flush draw. Talks a lot when strong.">${esc(P.notes)}</textarea></div>
+        <div class="out"><span class="lbl" style="margin:0">How to beat ${esc(P.name||'them')}</span><ul class="tips" id="p-tips">${playerTips(P).map(t=>`<li>${esc(t)}</li>`).join('')}</ul></div>
+        <div class="row">
+          <button type="button" class="btn primary" id="p-save">Save player</button>
+          <button type="button" class="btn" id="p-use">Use in review</button>
+          ${P.id?`<button type="button" class="btn ${S.confirmDelP?'danger':'ghost'}" id="p-del">${S.confirmDelP?'Tap to confirm':'Delete'}</button>`:''}
+        </div>
+      </div>
+    </div>`
+  :`<div class="panel prose"><h2>Your table</h2>
+      <p>Add each friend you play with. Pick their style, set how many hands they play, and tick their habits. You get a short list of how to beat them, and their range loads into a hand review in one tap.</p>
+      <button type="button" class="btn primary" id="p-add">Add player</button></div>`;
+  el.innerHTML=`<div class="cols"><div class="stack">${editor}</div>
+    <div class="stack">
+      <div class="row spread"><h2 style="margin:0">Players (${list.length})</h2>${P?'<button type="button" class="btn small" id="p-add">Add player</button>':''}</div>
+      ${list.length?`<div class="hands">${list.map(p=>`
+        <div class="hand">
+          <button type="button" class="hand-open" data-popen="${esc(p.id)}">
+            <span class="hand-title">${esc(p.name)}</span>
+            <span class="meta">${esc(STYLES[p.style]?.name||'')} · plays ${p.vpip}% of hands</span>
+            ${(p.tend||[]).length?`<span class="meta">${TEND.filter(t=>p.tend.includes(t[0])).map(t=>t[1]).join(' · ')}</span>`:''}
+          </button>
+          <button type="button" class="btn small" data-puse="${esc(p.id)}">Review vs</button>
+        </div>`).join('')}</div>`
+      :`<div class="panel empty-state">No players yet. Add the friends you play with most.</div>`}
+    </div></div>`;
+}
+async function savePlayer(){
+  const P=S.player;if(!P.name.trim()){toast('Give the player a name first');return;}
+  if(!P.id)P.id='p'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+  P.name=P.name.trim();P.updatedAt=Date.now();
+  const copy=JSON.parse(JSON.stringify(P));
+  const k=S.players.findIndex(x=>x.id===P.id);if(k>=0)S.players[k]=copy;else S.players.push(copy);
+  if(S.db){try{await S.db.collection('players').doc(P.id).set(copy);}catch{persistPlayersLocal();}}
+  else persistPlayersLocal();
+  if(S.hand.villainId===P.id)S.hand.villainName=P.name;
+  toast('Player saved');renderPlayers();refreshVillainSelect();renderSummary();
+}
+async function deletePlayer(){
+  const id=S.player.id;S.players=S.players.filter(p=>p.id!==id);S.player=null;S.confirmDelP=false;
+  if(S.db){try{await S.db.collection('players').doc(id).delete();}catch{}}
+  persistPlayersLocal();toast('Player deleted');renderPlayers();refreshVillainSelect();
+}
+const pview=document.getElementById('view-players');
+pview.addEventListener('input',e=>{
+  const t=e.target,P=S.player;if(!P)return;
+  if(t.id==='p-name')P.name=t.value;
+  if(t.id==='p-notes')P.notes=t.value;
+  if(t.id==='p-vpip'){P.vpip=+t.value;P.range=topRange(P.vpip);document.getElementById('p-vpip-val').textContent=t.value;
+    document.querySelectorAll('#p-grid .cell').forEach(c=>c.classList.toggle('on',P.range[+c.dataset.pcell]==='1'));}
+});
+pview.addEventListener('click',e=>{
+  const b=e.target.closest('button');if(!b)return;const P=S.player;
+  if(b.id==='p-add'){S.player=newPlayer();S.confirmDelP=false;renderPlayers();window.scrollTo(0,0);return;}
+  if(b.dataset.popen){const p=S.players.find(x=>x.id===b.dataset.popen);if(p){S.player=JSON.parse(JSON.stringify(p));S.player.tend=S.player.tend||[];S.confirmDelP=false;renderPlayers();window.scrollTo(0,0);}return;}
+  if(b.dataset.puse){const p=S.players.find(x=>x.id===b.dataset.puse);if(p)useInReview(p);return;}
+  if(!P)return;
+  if(b.id==='p-cancel'){S.player=null;renderPlayers();return;}
+  if(b.dataset.style){P.style=b.dataset.style;P.vpip=STYLES[P.style].vpip;P.range=topRange(P.vpip);renderPlayers();return;}
+  if(b.dataset.tend){const k=b.dataset.tend;P.tend=P.tend.includes(k)?P.tend.filter(x=>x!==k):[...P.tend,k];
+    b.setAttribute('aria-pressed',P.tend.includes(k));document.getElementById('p-tips').innerHTML=playerTips(P).map(t=>`<li>${esc(t)}</li>`).join('');return;}
+  if(b.dataset.pcell!=null){const k=+b.dataset.pcell,r=P.range.split('');r[k]=r[k]==='1'?'0':'1';P.range=r.join('');b.classList.toggle('on',r[k]==='1');return;}
+  if(b.id==='p-save'){savePlayer();return;}
+  if(b.id==='p-use'){if(!P.name.trim()){toast('Give the player a name first');return;}savePlayer().then(()=>useInReview(S.players.find(x=>x.id===P.id)));return;}
+  if(b.id==='p-del'){if(S.confirmDelP)deletePlayer();else{S.confirmDelP=true;renderPlayers();}return;}
+});
+
 /* ---------- events ---------- */
 function setTab(t){S.tab=t;
-  for(const v of ['review','preflop','saved','formulas']){document.getElementById('view-'+v).hidden=v!==t;document.getElementById('tab-'+v).setAttribute('aria-selected',v===t);}
+  for(const v of ['review','preflop','players','saved','formulas']){document.getElementById('view-'+v).hidden=v!==t;document.getElementById('tab-'+v).setAttribute('aria-selected',v===t);}
   try{localStorage.setItem('gto-review-tab',t)}catch{}
 }
 document.querySelector('.tabs').addEventListener('click',e=>{const b=e.target.closest('[data-tab]');if(b)setTab(b.dataset.tab);});
@@ -671,6 +806,10 @@ review.addEventListener('input',e=>{
 });
 review.addEventListener('change',e=>{
   const t=e.target,dec=t.closest('.dec');
+  if(t.id==='f-villain'){const p=S.players.find(x=>x.id===t.value);
+    S.hand.villainId=p?p.id:'';S.hand.villainName=p?p.name:'';
+    if(p){S.hand.range=p.range;S.hand.rangeName='Custom';toast(`Villain range set to ${p.name}'s`);}
+    saveDraft();document.getElementById('range-panel').innerHTML=rangePanelHTML();renderAllOuts();renderSummary();return;}
   if(t.dataset.f&&t.tagName==='SELECT'){S.hand[t.dataset.f]=t.value;saveDraft();renderSummary();return;}
   if(dec&&t.tagName==='SELECT'){const d=S.hand.decisions[+dec.dataset.i];d[t.dataset.d]=t.value;
     if(t.dataset.d==='kind')d.action=t.value==='facing'?'call':t.value;saveDraft();renderDecs();renderSummary();}
@@ -714,12 +853,13 @@ function showError(err){
 }
 function start(){
   let tab='review';try{tab=localStorage.getItem('gto-review-tab')||'review'}catch{}
-  if(!['review','preflop','saved','formulas'].includes(tab))tab='review';
+  if(!['review','preflop','players','saved','formulas'].includes(tab))tab='review';
   setTab(tab);
   try{renderReview();}catch(err){S.hand=exampleHand();try{localStorage.removeItem(DRAFT)}catch{};try{renderReview();}catch{};showError(err);}
   try{renderSaved();}catch(err){console.error(err);}
   try{renderFormulas();}catch(err){console.error(err);}
   try{renderPreflop();}catch(err){console.error(err);}
+  try{renderPlayers();}catch(err){console.error(err);}
   setTimeout(initDb,0);
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);else start();
