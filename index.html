@@ -41,8 +41,10 @@ button,input,select,textarea{font:inherit;color:inherit}
 .top-in{max-width:1180px;margin:0 auto;padding:12px 16px 0;display:flex;flex-wrap:wrap;align-items:end;justify-content:space-between;gap:8px 16px}
 .brand{font-family:var(--display);font-weight:700;font-size:1.35rem;letter-spacing:-.01em;padding-bottom:10px}
 .brand small{display:block;font-family:var(--body);font-weight:400;font-size:.78rem;color:var(--muted);letter-spacing:0}
-.tabs{display:flex;gap:4px}
-.tab{background:none;border:0;border-bottom:2px solid transparent;padding:8px 12px 10px;color:var(--muted);font-weight:600;cursor:pointer}
+.tabs{display:flex;gap:2px;max-width:100%;overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tab{background:none;border:0;border-bottom:2px solid transparent;padding:8px 10px 10px;color:var(--muted);font-weight:600;cursor:pointer;white-space:nowrap;flex:none}
+@media (max-width:520px){.top-in{flex-direction:column;align-items:stretch}.tabs{justify-content:space-between}.tab{padding-inline:6px}}
 .tab[aria-selected="true"]{color:var(--ink);border-color:var(--accent)}
 .wrap{max-width:1180px;margin:0 auto;padding-inline:16px;padding-block:16px 80px}
 .cols{display:grid;gap:16px}
