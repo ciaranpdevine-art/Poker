@@ -4,6 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <style>body{margin:0}[hidden]{display:none!important}</style>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="cloud.js"></script>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#0e7356">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -635,37 +639,53 @@ async function saveHand(){
   h.updatedAt=Date.now();
   const copy=JSON.parse(JSON.stringify(h));
   const k=S.hands.findIndex(x=>x.id===h.id);if(k>=0)S.hands[k]=copy;else S.hands.push(copy);
-  if(S.db){try{await S.db.collection('hands').doc(h.id).set(copy);toast('Saved');}
-    catch(e){persistLocal();toast('Saved in this browser only');}}
-  else{persistLocal();toast('Saved');}
+  if(S.db)S.db.collection('hands').doc(h.id).set(copy).catch(syncFail);
+  persistLocal();toast('Saved');
   saveDraft();renderReview();renderSaved();
 }
 async function deleteHand(id){
   S.hands=S.hands.filter(h=>h.id!==id);S.confirmDel=null;
-  if(S.db){try{await S.db.collection('hands').doc(id).delete();}catch{}}
+  if(S.db)S.db.collection('hands').doc(id).delete().catch(syncFail);
   persistLocal();
   if(S.hand.id===id)S.hand.id=null;
   renderSaved();toast('Deleted');
 }
-async function initDb(){
-  try{
-    if(!window.claude||!window.claude.use)return;
-    const db=await window.claude.use('db');if(!db)return;
-    S.db=db;
-    db.collection('hands').onSnapshot(snap=>{
-      const remote=snap.docs.map(d=>d.data());
-      // keep any hands only stored locally
-      const ids=new Set(remote.map(h=>h.id));
-      S.hands=[...remote,...ls.get(LOCAL,[]).filter(h=>!ids.has(h.id))];
-      renderSaved();
-    },()=>{S.db=null;renderSaved();});
-    db.collection('players').onSnapshot(snap=>{
-      const remote=snap.docs.map(d=>d.data());
-      const ids=new Set(remote.map(p=>p.id));
-      S.players=[...remote,...ls.get(LOCALP,[]).filter(p=>!ids.has(p.id))];
-      renderPlayers();refreshVillainSelect();
-    },()=>{});
-  }catch{}
+function syncFail(){if(window.Cloud)Cloud.note('Sync problem: changes are saved here and will retry');}
+// Signed in: hands and players live in your account (users/<uid>/poker_hands, poker_players)
+// and this browser keeps a copy. Signed out: this browser only, as before.
+function initDb(){
+  if(!window.Cloud)return;
+  let stop=null;
+  Cloud.onUser(async u=>{
+    if(stop){stop();stop=null;}
+    S.db=null;
+    if(!u){renderSaved();return;}
+    const ref=Cloud.userRef();
+    const db={collection:n=>ref.collection('poker_'+n)};
+    try{
+      if(!Cloud.migrated('poker')){
+        // First sign-in on this device: upload anything the account doesn't have yet. Nothing is overwritten.
+        Cloud.note("Uploading this device's hands…");
+        for(const [n,list] of [['hands',ls.get(LOCAL,[])],['players',ls.get(LOCALP,[])]]){
+          const have=new Set((await db.collection(n).get()).docs.map(d=>d.id));
+          const miss={};(list||[]).forEach(x=>{if(x&&x.id&&!have.has(x.id))miss[x.id]=x;});
+          await Cloud.putAll(db.collection(n),miss);
+        }
+        Cloud.markMigrated('poker');Cloud.note('');
+      }
+    }catch{Cloud.note("Couldn't reach your account, so hands stay on this device for now. Reload to try again.");return;}
+    if(Cloud.user!==u)return;
+    S.db=db;renderSaved();
+    const a=db.collection('hands').onSnapshot(snap=>{
+      if(snap.metadata.fromCache&&snap.empty&&S.hands.length)return;
+      S.hands=snap.docs.map(d=>d.data());persistLocal();renderSaved();
+    },syncFail);
+    const b=db.collection('players').onSnapshot(snap=>{
+      if(snap.metadata.fromCache&&snap.empty&&S.players.length)return;
+      S.players=snap.docs.map(d=>d.data());persistPlayersLocal();renderPlayers();refreshVillainSelect();
+    },syncFail);
+    stop=()=>{a();b();};
+  });
 }
 
 /* ---------- players ---------- */
@@ -756,14 +776,14 @@ async function savePlayer(){
   P.name=P.name.trim();P.updatedAt=Date.now();
   const copy=JSON.parse(JSON.stringify(P));
   const k=S.players.findIndex(x=>x.id===P.id);if(k>=0)S.players[k]=copy;else S.players.push(copy);
-  if(S.db){try{await S.db.collection('players').doc(P.id).set(copy);}catch{persistPlayersLocal();}}
-  else persistPlayersLocal();
+  if(S.db)S.db.collection('players').doc(P.id).set(copy).catch(syncFail);
+  persistPlayersLocal();
   if(S.hand.villainId===P.id)S.hand.villainName=P.name;
   toast('Player saved');renderPlayers();refreshVillainSelect();renderSummary();
 }
 async function deletePlayer(){
   const id=S.player.id;S.players=S.players.filter(p=>p.id!==id);S.player=null;S.confirmDelP=false;
-  if(S.db){try{await S.db.collection('players').doc(id).delete();}catch{}}
+  if(S.db)S.db.collection('players').doc(id).delete().catch(syncFail);
   persistPlayersLocal();toast('Player deleted');renderPlayers();refreshVillainSelect();
 }
 const pview=document.getElementById('view-players');
