@@ -1,5 +1,4 @@
 {
-  "id": "./",
   "name": "GTO Hand Review",
   "short_name": "Hand Review",
   "description": "Review poker hands against game-theory-optimal play.",
